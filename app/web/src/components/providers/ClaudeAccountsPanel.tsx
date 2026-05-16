@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   CircleDot,
@@ -5,6 +6,7 @@ import {
   HelpCircle,
   KeyRound,
   Loader2,
+  Plus,
   Trash2,
 } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
@@ -20,6 +22,8 @@ import {
   toggleClaudeAccount,
 } from '@/lib/claudeAccounts'
 import type { ClaudeAccount } from '@/lib/types'
+
+import { AddClaudeAccountModal } from './AddClaudeAccountModal'
 
 // ClaudeAccountsPanel renders the multi-account list for the Claude
 // provider. Account creation is filesystem-driven: operators run
@@ -37,6 +41,7 @@ import type { ClaudeAccount } from '@/lib/types'
 export function ClaudeAccountsPanel() {
   const { t } = useTranslation()
   const qc = useQueryClient()
+  const [addOpen, setAddOpen] = useState(false)
   const { data: accounts, isLoading } = useQuery({
     queryKey: ['claude-accounts'],
     queryFn: listClaudeAccounts,
@@ -120,22 +125,35 @@ export function ClaudeAccountsPanel() {
             <HelpCircle className="size-3.5" />
           </Link>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => importLocal.mutate()}
-          disabled={importLocal.isPending}
-          className="text-[11px] gap-1"
-          title={t('web.providers.claudeAccounts.importLocalTooltip')}
-        >
-          {importLocal.isPending ? (
-            <Loader2 className="size-3.5 animate-spin" />
-          ) : (
-            <Download className="size-3.5" />
-          )}
-          {t('web.providers.claudeAccounts.importLocal')}
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => setAddOpen(true)}
+            className="text-[11px] gap-1"
+            title={t('web.providers.claudeAccounts.addAccountTooltip')}
+          >
+            <Plus className="size-3.5" />
+            {t('web.providers.claudeAccounts.addAccount')}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => importLocal.mutate()}
+            disabled={importLocal.isPending}
+            className="text-[11px] gap-1"
+            title={t('web.providers.claudeAccounts.importLocalTooltip')}
+          >
+            {importLocal.isPending ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Download className="size-3.5" />
+            )}
+            {t('web.providers.claudeAccounts.importLocal')}
+          </Button>
+        </div>
       </div>
+      <AddClaudeAccountModal open={addOpen} onOpenChange={setAddOpen} />
 
       <div className="rounded-md border border-border bg-muted/20 px-3 py-2.5 text-[11px] text-muted-foreground leading-relaxed">
         <span className="font-medium text-foreground">

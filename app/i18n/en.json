@@ -982,7 +982,31 @@
         "removedToast": "Account removed",
         "removeFailedToast": "Remove failed",
         "toggleAria": "Toggle {name}",
-        "removeAria": "Remove {name}"
+        "removeAria": "Remove {name}",
+        "addAccount": "Add account",
+        "addAccountTooltip": "Enrol a new Claude OAuth account via the in-app wizard — no SSH required",
+        "addModal": {
+          "title": "Add Claude account",
+          "nameDescription": "Pick a short slug for this account. It becomes the directory name under ~/.claude-accounts/ on the gateway.",
+          "browserDescription": "Sign in to Claude.ai in your browser, click Authorize, then paste the code back here.",
+          "doneDescription": "Account credentials saved on the gateway.",
+          "nameLabel": "Account name",
+          "namePlaceholder": "personal",
+          "nameHelp": "Lowercase letters, digits, and hyphens. Max 32 chars. Examples: personal, work, labs-2.",
+          "cancel": "Cancel",
+          "continue": "Continue",
+          "complete": "Add account",
+          "step1Heading": "Step 1 — open the authorize URL in your browser",
+          "step2Heading": "Step 2 — paste the code from the callback URL",
+          "openAuthorize": "Open authorize URL",
+          "copyURL": "Copy URL",
+          "browserHint": "After clicking Authorize, your browser will land on a platform.claude.com URL. Copy the value after \"code=\" (everything up to the next \"&\" or end of URL).",
+          "codePlaceholder": "AUTHCODE…#STATE…",
+          "codeHelp": "Paste the full code value, including any \"#\" segment after it — the gateway handles trimming.",
+          "doneTitle": "{name} enrolled.",
+          "startFailedToast": "Could not start OAuth flow",
+          "completeFailedToast": "Could not complete OAuth flow"
+        }
       }
     },
     "channels": {
@@ -1671,16 +1695,46 @@
     },
     "serverSettings": {
       "sections": {
-        "general": { "title": "General", "desc": "Listen address, operator account, token TTL." },
-        "logging": { "title": "Logging", "desc": "Verbosity, format, and live tail." },
-        "sessions": { "title": "Sessions", "desc": "Idle detection thresholds." },
-        "vault": { "title": "Vault", "desc": "Notes, skills, and git-versioned root." },
-        "mcp": { "title": "MCP registry", "desc": "Server registry + secrets." },
-        "memory": { "title": "Memory", "desc": "Cross-CLI persistent memory subsystem." },
-        "backup": { "title": "Backup", "desc": "Encrypted DB backups, restore, and admin data exports." },
-        "claude": { "title": "Storage · Claude", "desc": "Where Claude transcripts live on disk." },
-        "codex": { "title": "Storage · Codex", "desc": "Codex sessions root." },
-        "gemini": { "title": "Storage · Gemini", "desc": "Gemini per-project tmp + projects.json." }
+        "general": {
+          "title": "General",
+          "desc": "Listen address, operator account, token TTL."
+        },
+        "logging": {
+          "title": "Logging",
+          "desc": "Verbosity, format, and live tail."
+        },
+        "sessions": {
+          "title": "Sessions",
+          "desc": "Idle detection thresholds."
+        },
+        "vault": {
+          "title": "Vault",
+          "desc": "Notes, skills, and git-versioned root."
+        },
+        "mcp": {
+          "title": "MCP registry",
+          "desc": "Server registry + secrets."
+        },
+        "memory": {
+          "title": "Memory",
+          "desc": "Cross-CLI persistent memory subsystem."
+        },
+        "backup": {
+          "title": "Backup",
+          "desc": "Encrypted DB backups, restore, and admin data exports."
+        },
+        "claude": {
+          "title": "Storage · Claude",
+          "desc": "Where Claude transcripts live on disk."
+        },
+        "codex": {
+          "title": "Storage · Codex",
+          "desc": "Codex sessions root."
+        },
+        "gemini": {
+          "title": "Storage · Gemini",
+          "desc": "Gemini per-project tmp + projects.json."
+        }
       },
       "loading": "Loading server settings…",
       "loadFailed": "Failed to load: {message}",
@@ -3132,12 +3186,30 @@
     "pathStyle": "Path-style addressing",
     "pathStyleSubtitle": "Legacy / MinIO",
     "kinds": {
-      "local": { "label": "Local disk", "description": "Folder on the machine running opendray" },
-      "smb": { "label": "SMB share", "description": "Windows shares + most home NAS appliances" },
-      "webdav": { "label": "WebDAV", "description": "Self-hosted clouds + file-sharing services" },
-      "sftp": { "label": "SFTP", "description": "Any SSH-accessible server" },
-      "s3": { "label": "S3 / compatible", "description": "Amazon S3 + S3-compatible buckets (MinIO, R2, B2)" },
-      "rclone": { "label": "rclone (any)", "description": "OneDrive, Google Drive, Dropbox via the rclone CLI" }
+      "local": {
+        "label": "Local disk",
+        "description": "Folder on the machine running opendray"
+      },
+      "smb": {
+        "label": "SMB share",
+        "description": "Windows shares + most home NAS appliances"
+      },
+      "webdav": {
+        "label": "WebDAV",
+        "description": "Self-hosted clouds + file-sharing services"
+      },
+      "sftp": {
+        "label": "SFTP",
+        "description": "Any SSH-accessible server"
+      },
+      "s3": {
+        "label": "S3 / compatible",
+        "description": "Amazon S3 + S3-compatible buckets (MinIO, R2, B2)"
+      },
+      "rclone": {
+        "label": "rclone (any)",
+        "description": "OneDrive, Google Drive, Dropbox via the rclone CLI"
+      }
     },
     "formTitleEdit": "Edit target",
     "formTitleNew": "New backup target",

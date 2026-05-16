@@ -982,7 +982,31 @@
         "removedToast": "账号已移除",
         "removeFailedToast": "移除失败",
         "toggleAria": "切换 {name}",
-        "removeAria": "移除 {name}"
+        "removeAria": "移除 {name}",
+        "addAccount": "添加账户",
+        "addAccountTooltip": "通过应用内向导注册新的 Claude OAuth 账户 — 无需 SSH",
+        "addModal": {
+          "title": "添加 Claude 账户",
+          "nameDescription": "为此账户选择一个简短的标识。它将成为网关 ~/.claude-accounts/ 下的目录名。",
+          "browserDescription": "在浏览器中登录 Claude.ai,点击授权,然后将代码粘贴回此处。",
+          "doneDescription": "账户凭据已保存到网关。",
+          "nameLabel": "账户名",
+          "namePlaceholder": "personal",
+          "nameHelp": "小写字母、数字和连字符。最多 32 个字符。例如:personal、work、labs-2。",
+          "cancel": "取消",
+          "continue": "继续",
+          "complete": "添加账户",
+          "step1Heading": "第 1 步 — 在浏览器中打开授权 URL",
+          "step2Heading": "第 2 步 — 粘贴回调 URL 中的代码",
+          "openAuthorize": "打开授权 URL",
+          "copyURL": "复制 URL",
+          "browserHint": "点击授权后,浏览器会跳转到 platform.claude.com URL。复制 \"code=\" 后面的值(直到下一个 \"&\" 或 URL 结尾)。",
+          "codePlaceholder": "AUTHCODE…#STATE…",
+          "codeHelp": "粘贴完整的代码值,包括后面的任何 \"#\" 段 — 网关会自动处理。",
+          "doneTitle": "{name} 已注册。",
+          "startFailedToast": "无法启动 OAuth 流程",
+          "completeFailedToast": "无法完成 OAuth 流程"
+        }
       }
     },
     "channels": {
@@ -1671,16 +1695,46 @@
     },
     "serverSettings": {
       "sections": {
-        "general": { "title": "通用", "desc": "监听地址、操作员账号、令牌 TTL。" },
-        "logging": { "title": "日志", "desc": "日志级别、格式与实时跟踪。" },
-        "sessions": { "title": "会话", "desc": "空闲检测阈值。" },
-        "vault": { "title": "Vault", "desc": "笔记、技能与 git 版本化根目录。" },
-        "mcp": { "title": "MCP 注册表", "desc": "服务器注册表与密钥。" },
-        "memory": { "title": "记忆", "desc": "跨 CLI 的持久化记忆子系统。" },
-        "backup": { "title": "备份", "desc": "加密数据库备份、恢复，以及管理员数据导出。" },
-        "claude": { "title": "存储 · Claude", "desc": "Claude 会话记录在磁盘上的位置。" },
-        "codex": { "title": "存储 · Codex", "desc": "Codex 会话根目录。" },
-        "gemini": { "title": "存储 · Gemini", "desc": "Gemini 每项目 tmp 与 projects.json。" }
+        "general": {
+          "title": "通用",
+          "desc": "监听地址、操作员账号、令牌 TTL。"
+        },
+        "logging": {
+          "title": "日志",
+          "desc": "日志级别、格式与实时跟踪。"
+        },
+        "sessions": {
+          "title": "会话",
+          "desc": "空闲检测阈值。"
+        },
+        "vault": {
+          "title": "Vault",
+          "desc": "笔记、技能与 git 版本化根目录。"
+        },
+        "mcp": {
+          "title": "MCP 注册表",
+          "desc": "服务器注册表与密钥。"
+        },
+        "memory": {
+          "title": "记忆",
+          "desc": "跨 CLI 的持久化记忆子系统。"
+        },
+        "backup": {
+          "title": "备份",
+          "desc": "加密数据库备份、恢复，以及管理员数据导出。"
+        },
+        "claude": {
+          "title": "存储 · Claude",
+          "desc": "Claude 会话记录在磁盘上的位置。"
+        },
+        "codex": {
+          "title": "存储 · Codex",
+          "desc": "Codex 会话根目录。"
+        },
+        "gemini": {
+          "title": "存储 · Gemini",
+          "desc": "Gemini 每项目 tmp 与 projects.json。"
+        }
       },
       "loading": "正在加载服务器设置…",
       "loadFailed": "加载失败：{message}",
@@ -3132,12 +3186,30 @@
     "pathStyle": "路径风格寻址",
     "pathStyleSubtitle": "旧版 / MinIO",
     "kinds": {
-      "local": { "label": "本地磁盘", "description": "运行 opendray 的机器上的文件夹" },
-      "smb": { "label": "SMB 共享", "description": "Windows 共享 + 多数家用 NAS 设备" },
-      "webdav": { "label": "WebDAV", "description": "自托管云盘 + 文件共享服务" },
-      "sftp": { "label": "SFTP", "description": "任何可 SSH 访问的服务器" },
-      "s3": { "label": "S3 / 兼容", "description": "Amazon S3 + S3 兼容存储桶（MinIO、R2、B2）" },
-      "rclone": { "label": "rclone（任意）", "description": "通过 rclone CLI 访问 OneDrive、Google Drive、Dropbox" }
+      "local": {
+        "label": "本地磁盘",
+        "description": "运行 opendray 的机器上的文件夹"
+      },
+      "smb": {
+        "label": "SMB 共享",
+        "description": "Windows 共享 + 多数家用 NAS 设备"
+      },
+      "webdav": {
+        "label": "WebDAV",
+        "description": "自托管云盘 + 文件共享服务"
+      },
+      "sftp": {
+        "label": "SFTP",
+        "description": "任何可 SSH 访问的服务器"
+      },
+      "s3": {
+        "label": "S3 / 兼容",
+        "description": "Amazon S3 + S3 兼容存储桶（MinIO、R2、B2）"
+      },
+      "rclone": {
+        "label": "rclone（任意）",
+        "description": "通过 rclone CLI 访问 OneDrive、Google Drive、Dropbox"
+      }
     },
     "formTitleEdit": "编辑目标",
     "formTitleNew": "新建备份目标",
