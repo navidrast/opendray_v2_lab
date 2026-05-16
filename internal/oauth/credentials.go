@@ -30,10 +30,12 @@ type credentialsPayload struct {
 }
 
 type oauthInner struct {
-	AccessToken  string   `json:"accessToken"`
-	RefreshToken string   `json:"refreshToken"`
-	ExpiresAt    int64    `json:"expiresAt"`        // milliseconds since unix epoch
-	Scopes       []string `json:"scopes,omitempty"` // parsed from the OAuth response's space-separated scope string
+	AccessToken      string   `json:"accessToken"`
+	RefreshToken     string   `json:"refreshToken"`
+	ExpiresAt        int64    `json:"expiresAt"`                  // milliseconds since unix epoch
+	Scopes           []string `json:"scopes,omitempty"`           // parsed from the OAuth response's space-separated scope string
+	SubscriptionType string   `json:"subscriptionType,omitempty"` // e.g. "max", "pro" — derived from /api/oauth/profile
+	RateLimitTier    string   `json:"rateLimitTier,omitempty"`    // e.g. "default_claude_max_20x" — from /api/oauth/profile
 }
 
 // WriteCredentials persists the OAuth tokens for an account into the
@@ -65,7 +67,7 @@ type oauthInner struct {
 // model from elsewhere. We'll add settings management when the user
 // actually requests a non-default permissions posture, via a
 // separate, properly-scoped writer.
-func WriteCredentials(accountsRoot, name string, tok Tokens) error {
+func WriteCredentials(accountsRoot, name string, tok Tokens, enrich Enrichment) error {
 	configDir := filepath.Join(accountsRoot, name)
 	if err := os.MkdirAll(configDir, 0o700); err != nil {
 		return fmt.Errorf("oauth: mkdir %s: %w", configDir, err)
@@ -77,40 +79,69 @@ func WriteCredentials(accountsRoot, name string, tok Tokens) error {
 	expiresAt := time.Now().Add(time.Duration(tok.ExpiresIn) * time.Second).UnixMilli()
 	creds := credentialsPayload{
 		ClaudeAiOauth: oauthInner{
-			AccessToken:  tok.AccessToken,
-			RefreshToken: tok.RefreshToken,
-			ExpiresAt:    expiresAt,
-			Scopes:       splitScopes(tok.Scope),
+			AccessToken:      tok.AccessToken,
+			RefreshToken:     tok.RefreshToken,
+			ExpiresAt:        expiresAt,
+			Scopes:           splitScopes(tok.Scope),
+			SubscriptionType: enrich.SubscriptionType,
+			RateLimitTier:    enrich.RateLimitTier,
 		},
 	}
 	return writeJSONAtomic(filepath.Join(configDir, ".credentials.json"), creds, 0o600)
 }
 
+// EnrichmentFromProfile is the canonical mapping from a fetched
+// Anthropic /api/oauth/profile response to the on-disk Enrichment
+// shape. Centralised so handler + refresher + tests all agree on
+// the same projection.
+func EnrichmentFromProfile(p Profile) Enrichment {
+	return Enrichment{
+		SubscriptionType: SubscriptionTypeFromOrgType(p.Organization.OrganizationType),
+		RateLimitTier:    p.Organization.RateLimitTier,
+	}
+}
+
+// Enrichment carries the cosmetic-but-useful per-account profile
+// fields that come from /api/oauth/profile (subscription tier, rate
+// limit tier). These are persisted on disk so the UI doesn't lose
+// the "Max" / "Pro" badge across server restarts or token refreshes.
+// Empty Enrichment is valid — it just means we haven't enriched
+// (or the enrichment call failed at enrollment time).
+type Enrichment struct {
+	SubscriptionType string
+	RateLimitTier    string
+}
+
 // ReadCredentials parses an existing per-account credentials.json
-// back into Tokens (with ExpiresIn computed relative to now, which
-// is what the refresh goroutine needs to decide whether a refresh
-// is due). os.ErrNotExist passes through unwrapped so callers can
+// back into Tokens + Enrichment. The refresh goroutine uses this to
+// (a) decide whether to refresh and (b) preserve enrichment across
+// the write that follows.
+//
+// os.ErrNotExist passes through unwrapped so callers can
 // `errors.Is(err, os.ErrNotExist)` it without unwrapping noise.
 //
 // Path matches the Claude Code 2.x layout written above:
 // <accountsRoot>/<name>/.credentials.json (NOT under .claude/).
-func ReadCredentials(accountsRoot, name string) (Tokens, error) {
+func ReadCredentials(accountsRoot, name string) (Tokens, Enrichment, error) {
 	path := filepath.Join(accountsRoot, name, ".credentials.json")
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return Tokens{}, err
+		return Tokens{}, Enrichment{}, err
 	}
 	var p credentialsPayload
 	if err := json.Unmarshal(b, &p); err != nil {
-		return Tokens{}, fmt.Errorf("oauth: parse %s: %w", path, err)
+		return Tokens{}, Enrichment{}, fmt.Errorf("oauth: parse %s: %w", path, err)
 	}
 	remaining := time.UnixMilli(p.ClaudeAiOauth.ExpiresAt).Sub(time.Now())
 	return Tokens{
-		AccessToken:  p.ClaudeAiOauth.AccessToken,
-		RefreshToken: p.ClaudeAiOauth.RefreshToken,
-		ExpiresIn:    int(remaining.Seconds()),
-		Scope:        strings.Join(p.ClaudeAiOauth.Scopes, " "),
-	}, nil
+			AccessToken:  p.ClaudeAiOauth.AccessToken,
+			RefreshToken: p.ClaudeAiOauth.RefreshToken,
+			ExpiresIn:    int(remaining.Seconds()),
+			Scope:        strings.Join(p.ClaudeAiOauth.Scopes, " "),
+		}, Enrichment{
+			SubscriptionType: p.ClaudeAiOauth.SubscriptionType,
+			RateLimitTier:    p.ClaudeAiOauth.RateLimitTier,
+		}, nil
 }
 
 // splitScopes converts an OAuth-spec space-separated scope string

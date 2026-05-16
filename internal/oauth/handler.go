@@ -79,8 +79,11 @@ type completeRequest struct {
 }
 
 type completeResponse struct {
-	Name      string `json:"name"`
-	ExpiresIn int    `json:"expires_in_seconds"`
+	Name             string `json:"name"`
+	ExpiresIn        int    `json:"expires_in_seconds"`
+	Email            string `json:"email,omitempty"`
+	SubscriptionType string `json:"subscription_type,omitempty"`
+	OrganizationName string `json:"organization_name,omitempty"`
 }
 
 func (h *Handlers) complete(w http.ResponseWriter, r *http.Request) {
@@ -106,7 +109,19 @@ func (h *Handlers) complete(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadGateway, err)
 		return
 	}
-	if err := WriteCredentials(h.accountsRoot, name, tok); err != nil {
+	// Best-effort profile enrichment. A failure here is non-fatal:
+	// credentials are still valid and the cosmetic subscription
+	// badge will back-fill on Claude Code's first real API call.
+	// We log the failure but continue.
+	var enrich Enrichment
+	var profForResp *Profile
+	if p, perr := FetchProfile(r.Context(), tok.AccessToken); perr != nil {
+		h.log.Warn("fetch profile failed; continuing without enrichment", "name", name, "err", perr)
+	} else {
+		enrich = EnrichmentFromProfile(p)
+		profForResp = &p
+	}
+	if err := WriteCredentials(h.accountsRoot, name, tok, enrich); err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -118,8 +133,16 @@ func (h *Handlers) complete(w http.ResponseWriter, r *http.Request) {
 			h.log.Warn("upsert account row failed", "name", name, "err", err)
 		}
 	}
-	h.log.Info("oauth account enrolled", "name", name, "expires_in_seconds", tok.ExpiresIn)
-	writeJSON(w, http.StatusOK, completeResponse{Name: name, ExpiresIn: tok.ExpiresIn})
+	resp := completeResponse{Name: name, ExpiresIn: tok.ExpiresIn}
+	if profForResp != nil {
+		resp.Email = profForResp.Account.Email
+		resp.SubscriptionType = enrich.SubscriptionType
+		resp.OrganizationName = profForResp.Organization.Name
+	}
+	h.log.Info("oauth account enrolled", "name", name,
+		"expires_in_seconds", tok.ExpiresIn,
+		"subscription", resp.SubscriptionType)
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func writeJSON(w http.ResponseWriter, code int, body any) {

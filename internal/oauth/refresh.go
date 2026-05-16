@@ -101,7 +101,7 @@ func (r *Refresher) sweep(ctx context.Context) {
 // or credentials are still fresh enough), and an error only on
 // actual failures the operator should know about.
 func (r *Refresher) refreshOne(ctx context.Context, name string) error {
-	tok, err := ReadCredentials(r.accountsRoot, name)
+	tok, enrich, err := ReadCredentials(r.accountsRoot, name)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			// Account row exists but no credentials on disk yet —
@@ -128,10 +128,12 @@ func (r *Refresher) refreshOne(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	// Anthropic doesn't always rotate the refresh_token, but when
-	// they do, the new one must overwrite the old. WriteCredentials
-	// is idempotent and atomic, so a partial write isn't a concern.
-	if err := WriteCredentials(r.accountsRoot, name, fresh); err != nil {
+	// Preserve the existing Enrichment across the rotation —
+	// subscription tier and rate-limit tier don't change between
+	// access-token refreshes, only when the operator changes
+	// subscription on Anthropic's side. Re-fetching profile on
+	// every refresh would burn API calls for no signal.
+	if err := WriteCredentials(r.accountsRoot, name, fresh, enrich); err != nil {
 		return err
 	}
 	r.log.Info("refreshed account credentials",
