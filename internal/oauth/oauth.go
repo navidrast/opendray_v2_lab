@@ -199,11 +199,13 @@ func generateVerifier() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// generateState is the CSRF / replay token. 16 random bytes is
-// enough to be unguessable; we store + echo it both ways for
-// belt-and-braces verification on callback.
+// generateState is the CSRF / replay token. 32 bytes matches what
+// the official `claude` CLI emits (43 base64url chars). Anthropic's
+// OAuth server appears to reject shorter states with "auth failed"
+// even though OAuth2 §10.12 treats state as opaque — confirmed
+// empirically against state lengths of 16 (rejected) vs 32 (works).
 func generateState() (string, error) {
-	b := make([]byte, 16)
+	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
