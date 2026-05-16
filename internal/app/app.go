@@ -53,6 +53,7 @@ import (
 	memworker "github.com/opendray/opendray-v2/internal/memory/worker"
 	"github.com/opendray/opendray-v2/internal/memquery"
 	notesapi "github.com/opendray/opendray-v2/internal/notes"
+	"github.com/opendray/opendray-v2/internal/oauth"
 	"github.com/opendray/opendray-v2/internal/projectdoc"
 	"github.com/opendray/opendray-v2/internal/projectscan"
 	"github.com/opendray/opendray-v2/internal/prwatcher"
@@ -88,6 +89,7 @@ type App struct {
 	gitActivityScheduler *gitactivity.Scheduler
 	conflictScheduler    *memconflict.Scheduler // M-PC daily cross-layer conflict scan
 	prWatcher            *prwatcher.Service     // polls open PRs' CI checks and emits pr.checks_completed
+	oauthRefresher       *oauth.Refresher       // background refresh of claude_accounts OAuth tokens
 	server               *http.Server
 }
 
@@ -120,11 +122,41 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 	catalogHandlers := catalog.NewHandlers(cat, log)
 
 	var cliacctOpts []cliacct.Option
+	accountsRoot := defaultAccountsDir()
 	if d := strings.TrimSpace(cfg.Providers.Claude.AccountsDir); d != "" {
-		cliacctOpts = append(cliacctOpts, cliacct.WithAccountsDir(expandPath(d)))
+		accountsRoot = expandPath(d)
+		cliacctOpts = append(cliacctOpts, cliacct.WithAccountsDir(accountsRoot))
 	}
 	cliacctSvc := cliacct.NewService(st.Pool(), bus, log, cliacctOpts...)
 	cliacctHandlers := cliacct.NewHandlers(cliacctSvc, log)
+
+	// OAuth subsystem — server-driven PKCE for Claude account enrolment.
+	// Separate from cliacct: cliacct owns the account row + on-spawn env
+	// injection, oauth owns credential acquisition + refresh. They
+	// collaborate via the per-account directory layout below
+	// (accountsRoot/<name>/.credentials.json).
+	oauthFlows := oauth.NewFlows(log)
+	oauthLister := cliacctAccountLister{svc: cliacctSvc}
+	oauthRefresher := oauth.NewRefresher(log, accountsRoot, oauthLister)
+	// upserter is the callback the oauth handler fires once
+	// credentials.json is written. It materialises a matching
+	// claude_accounts row using the existing cliacct.Create surface
+	// so the new account appears in the Providers panel immediately.
+	oauthUpserter := func(name string) error {
+		_, err := cliacctSvc.Create(ctx, cliacct.CreateRequest{
+			Name:        name,
+			ConfigDir:   filepath.Join(accountsRoot, name),
+			Description: "enrolled via OAuth wizard",
+		})
+		// Duplicate (operator re-ran the wizard for a name that
+		// already exists) is non-fatal — the credentials.json on
+		// disk has been refreshed, the row stays.
+		if err != nil && errors.Is(err, cliacct.ErrDuplicate) {
+			return nil
+		}
+		return err
+	}
+	oauthHandlers := oauth.NewHandlers(oauthFlows, accountsRoot, oauthUpserter, log)
 
 	// Vault + skills are needed by the SessionProvider so spawn-time
 	// injection has them available. Constructed here (before the
@@ -673,6 +705,7 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 				sessionHandlers.Mount(r)
 				catalogHandlers.Mount(r)
 				cliacctHandlers.Mount(r)
+				oauthHandlers.Mount(r)
 				channelHandlers.Mount(r)
 				memoryHandlers.Mount(r)
 				projectDocHandlers.Mount(r)
@@ -707,8 +740,42 @@ func New(ctx context.Context, cfg config.Config) (*App, error) {
 		gitActivityScheduler: gitActivityScheduler,
 		conflictScheduler:    conflictScheduler,
 		prWatcher:            prWatcher,
+		oauthRefresher:       oauthRefresher,
 		server:               srv,
 	}, nil
+}
+
+// defaultAccountsDir mirrors cliacct.Service.resolveAccountsDir for
+// the case where no override is configured. Lifted to the app layer
+// so the OAuth subsystem (which needs the same path for refresh +
+// credential writes) can be wired without importing cliacct internals.
+func defaultAccountsDir() string {
+	home, _ := os.UserHomeDir()
+	if home == "" {
+		return ""
+	}
+	return filepath.Join(home, ".claude-accounts")
+}
+
+// cliacctAccountLister adapts cliacct.Service to oauth.AccountLister.
+// Returns the names (slugs) of every enabled account so the OAuth
+// refresh sweep knows which credentials.json files to keep alive.
+type cliacctAccountLister struct {
+	svc *cliacct.Service
+}
+
+func (l cliacctAccountLister) AccountNames(ctx context.Context) ([]string, error) {
+	accounts, err := l.svc.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(accounts))
+	for _, a := range accounts {
+		if a.Enabled {
+			out = append(out, a.Name)
+		}
+	}
+	return out, nil
 }
 
 // Migrate applies pending DB migrations and returns. Used by `opendray migrate`.
@@ -815,6 +882,15 @@ func (a *App) Run(ctx context.Context) error {
 	if a.prWatcher != nil {
 		a.prWatcher.Start(ctx)
 	}
+
+	// OAuth refresh sweep — every 30 min, refresh any account whose
+	// token has <1h remaining. Always non-nil after New returns,
+	// no nil-guard needed.
+	oauthRefreshDone := make(chan struct{})
+	go func() {
+		a.oauthRefresher.Run(ctx)
+		close(oauthRefreshDone)
+	}()
 
 	errCh := make(chan error, 1)
 	go func() {
