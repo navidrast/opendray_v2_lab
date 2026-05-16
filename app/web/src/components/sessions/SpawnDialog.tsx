@@ -98,8 +98,10 @@ export function SpawnDialog({
   })
   const accounts = (claudeAccounts ?? []).filter((a) => a.enabled)
   // Multi-account mode (≥2 enabled): no "Default" button — operator
-  // must pick one. Single-account mode keeps Default for parity
-  // with the pre-PR-54 behaviour.
+  // must pick one. Single-account mode keeps Default selectable
+  // (for the rare operator who wants Claude's system-keychain
+  // login bypassed via no CLAUDE_CONFIG_DIR injection) but no
+  // longer DEFAULTS to it.
   const multiAccount = accounts.length >= 2
 
   // When provider changes, clear account selection so we don't keep
@@ -111,15 +113,19 @@ export function SpawnDialog({
     setBypassEnabled(false)
   }, [providerId])
 
-  // Multi-account auto-pick: when 2+ accounts are configured and
-  // nothing is selected yet, force-select the first one. Avoids
-  // the dialog ever submitting with an empty (== "Default")
-  // account id when Default isn't shown to the operator.
+  // Auto-pick the first account whenever ANY are configured and
+  // nothing is selected yet. Avoids the silent failure mode where a
+  // fresh operator with one enrolled account spawns a session,
+  // accountId stays "" (== Default == no CLAUDE_CONFIG_DIR
+  // injection), and Claude Code itself prompts for OAuth inside
+  // the PTY despite the gateway having a working account. Default
+  // is still selectable explicitly via the radio — this just
+  // changes the initial pick.
   useEffect(() => {
-    if (multiAccount && !accountId && accounts.length > 0) {
+    if (!accountId && accounts.length > 0) {
       setAccountId(accounts[0].id)
     }
-  }, [multiAccount, accountId, accounts])
+  }, [accountId, accounts])
 
   const mutation = useMutation({
     mutationFn: createSession,
