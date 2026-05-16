@@ -46,27 +46,39 @@ type oauthInner struct {
 // accountsRoot is the per-install configured root (default
 // ~/.claude-accounts), name is the slug. Final layout:
 //
-//	<root>/<name>/.credentials.json   (the tokens, mode 0600)
+//	<root>/<name>/.credentials.json   (Claude Code 2.x layout, mode 0600)
+//	<root>/tokens/<name>.token        (legacy claude-acc bare-token file, mode 0600)
 //
-// Parent dir is forced to mode 0700. Re-Chmoding a pre-existing dir
-// ensures opendray's mode invariants hold even if the operator
+// Two files because we straddle two consumers:
+//
+//   - Claude Code 2.x itself reads <CLAUDE_CONFIG_DIR>/.credentials.json
+//     when opendray spawns a session with CLAUDE_CONFIG_DIR pointing
+//     at this account's dir. The file carries access + refresh tokens,
+//     expiry, scopes, subscription tier — everything needed for the
+//     CLI to operate and self-refresh.
+//   - opendray's session provider (internal/cliacct) was built for the
+//     v1.x claude-acc host tool's convention: a bare-string token file
+//     at <root>/tokens/<name>.token, injected as CLAUDE_CODE_OAUTH_TOKEN
+//     at spawn time. Without this file, sessions bound to this account
+//     spawn with the right CLAUDE_CONFIG_DIR but no env-var token, and
+//     Claude Code falls through to its own auth prompt inside the PTY
+//     (because the env var, when absent, is treated as a hard signal
+//     to ignore disk creds in some Claude Code 2.x paths).
+//
+// Writing both keeps the new wizard compatible with the existing
+// spawn provider. Phase 2 (long-term): update opendray's session
+// provider to prefer .credentials.json + drop the bare-token
+// expectation, at which point this dual write can collapse.
+//
+// Parent dirs are forced to mode 0700. Re-Chmoding a pre-existing
+// dir ensures opendray's mode invariants hold even if the operator
 // manually created the tree with permissive defaults.
 //
 // NOTE: we deliberately do NOT write <root>/<name>/.claude.json
 // here, despite older RCC notes suggesting it as an "onboarding
 // bypass." Claude Code 2.x writes its own .claude.json on first run
 // (~1 KiB of userID / oauthAccount / migration state) and an
-// opendray-written stub would silently clobber that state. If the
-// onboarding-prompt-on-first-spawn issue resurfaces, the right fix
-// is a merge — read existing .claude.json, set
-// hasCompletedOnboarding=true, write back — not a wholesale
-// overwrite.
-//
-// Same reasoning for <root>/<name>/.claude/settings.json: the path
-// is no longer canonical in 2.x; Claude Code reads its permissions
-// model from elsewhere. We'll add settings management when the user
-// actually requests a non-default permissions posture, via a
-// separate, properly-scoped writer.
+// opendray-written stub would silently clobber that state.
 func WriteCredentials(accountsRoot, name string, tok Tokens, enrich Enrichment) error {
 	configDir := filepath.Join(accountsRoot, name)
 	if err := os.MkdirAll(configDir, 0o700); err != nil {
@@ -87,7 +99,27 @@ func WriteCredentials(accountsRoot, name string, tok Tokens, enrich Enrichment) 
 			RateLimitTier:    enrich.RateLimitTier,
 		},
 	}
-	return writeJSONAtomic(filepath.Join(configDir, ".credentials.json"), creds, 0o600)
+	if err := writeJSONAtomic(filepath.Join(configDir, ".credentials.json"), creds, 0o600); err != nil {
+		return err
+	}
+
+	// Legacy bare-token file for opendray's cliacct session provider.
+	// See function doc for rationale. The order matters: credentials.json
+	// first so a partial write leaves the disk in a state where
+	// Claude Code 2.x can still run (the .token file is opendray's
+	// session-provider concern, not Claude Code's).
+	tokensDir := filepath.Join(accountsRoot, "tokens")
+	if err := os.MkdirAll(tokensDir, 0o700); err != nil {
+		return fmt.Errorf("oauth: mkdir %s: %w", tokensDir, err)
+	}
+	if err := os.Chmod(tokensDir, 0o700); err != nil {
+		return fmt.Errorf("oauth: chmod %s: %w", tokensDir, err)
+	}
+	tokenPath := filepath.Join(tokensDir, name+".token")
+	if err := writeBytesAtomic(tokenPath, []byte(tok.AccessToken), 0o600); err != nil {
+		return err
+	}
+	return nil
 }
 
 // EnrichmentFromProfile is the canonical mapping from a fetched
@@ -156,15 +188,21 @@ func splitScopes(s string) []string {
 }
 
 // writeJSONAtomic marshals v as indented JSON and writes via the
-// temp-then-rename pattern. A crash mid-write leaves the previous
-// file intact rather than producing a half-written file the next
-// read would choke on. Mirrors the pattern in internal/auth/keyfile.go
-// (WriteKeyFile) so reviewers don't have to context-switch.
+// temp-then-rename pattern. Wraps writeBytesAtomic.
 func writeJSONAtomic(path string, v any, mode os.FileMode) error {
 	body, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return fmt.Errorf("oauth: marshal %s: %w", path, err)
 	}
+	return writeBytesAtomic(path, body, mode)
+}
+
+// writeBytesAtomic writes body to path via temp-then-rename. A
+// crash mid-write leaves the previous file intact rather than
+// producing a half-written file the next read would choke on.
+// Mirrors the pattern in internal/auth/keyfile.go (WriteKeyFile)
+// so reviewers don't have to context-switch.
+func writeBytesAtomic(path string, body []byte, mode os.FileMode) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp-*")
 	if err != nil {
