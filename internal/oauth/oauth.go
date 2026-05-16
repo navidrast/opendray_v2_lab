@@ -94,10 +94,15 @@ type Tokens struct {
 }
 
 // flowTTL bounds how long an outstanding flow can sit in memory
-// before the user must restart. 10 min is generous for a manual
-// browser+paste workflow on a slow phone but short enough that a
-// stale flow can't be exploited by a stolen FlowID hours later.
-const flowTTL = 10 * time.Minute
+// before the user must restart. Originally 10 min; bumped to 60
+// after a real test showed a non-technical user can realistically
+// take 15-20 min on the browser → Cloudflare challenge → sign-in
+// → Authorize → paste-back path, especially with any retries.
+// The FlowID isn't a high-value secret on its own (an attacker
+// would still need the user's one-shot auth code to do anything
+// with it), so the longer window is a UX win without a real
+// security cost.
+const flowTTL = 60 * time.Minute
 
 // ErrFlowNotFound is returned by Take when the FlowID is unknown,
 // already consumed, or has expired past flowTTL.
